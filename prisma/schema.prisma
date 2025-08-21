@@ -1,0 +1,431 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["public", "auth"]
+}
+
+enum InviteStatus {
+  pending
+  accepted
+  declined
+  expired
+
+  @@schema("public")
+}
+
+enum WorkflowExecutionStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+
+  @@schema("public")
+}
+
+enum NodeExecutionStatus {
+  pending
+  running
+  succeeded
+  failed
+  skipped
+  canceled
+  retrying
+
+  @@schema("public")
+}
+
+enum WorkspaceRole {
+  owner
+  admin
+  member
+  viewer
+
+  @@schema("public")
+}
+
+// --------------------------------------------------------
+// AUTH + RBAC
+// --------------------------------------------------------
+
+model User {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email             String    @unique @db.VarChar(255)
+  username          String    @unique @db.VarChar(100)
+  password          String    @map("password") @db.Text
+  fullName          String?   @map("full_name") @db.VarChar(255)
+  roleId            String?   @db.Uuid
+  isActive          Boolean   @default(true) @map("is_active")
+  emailVerified     Boolean   @default(false) @map("email_verified")
+  emailVerifiedAt   DateTime? @map("email_verified_at")
+  phone             String?   @unique @db.VarChar(20)
+  phoneVerified     Boolean   @default(false) @map("phone_verified")
+  phoneVerifiedAt   DateTime? @map("phone_verified_at")
+  resetToken        String?   @map("reset_token") @db.VarChar(255)
+  resetTokenExpires DateTime? @map("reset_token_expires")
+  lastLoginAt       DateTime? @map("last_login_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @map("updated_at")
+
+  // Relations
+  role                 Role?               @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  sessions             Session[]
+  apiTokens            ApiToken[]
+  userSecrets          UserSecret[]
+  workflows            Workflow[]
+  workflowExecutions   WorkflowExecution[] @relation("WorkflowExecutionsCreatedBy")
+  onboarding           AccountOnboarding?
+  workspaceMemberships WorkspaceMember[]   @relation("WorkspaceMembersUser")
+  workspacesOwned      Workspace[]         @relation("WorkspacesOwner")
+
+  @@index([roleId])
+  @@map("users")
+  @@schema("auth")
+}
+
+model Role {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  rolePermissions RolePermission[]
+  users           User[]
+
+  @@map("roles")
+  @@schema("auth")
+}
+
+model Permission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+  @@schema("auth")
+}
+
+model RolePermission {
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId], map: "role_permissions_pkey")
+  @@map("role_permissions")
+  @@schema("auth")
+}
+
+model Session {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @db.Uuid
+  sessionToken String    @unique @map("session_token") @db.VarChar(255)
+  userAgent    String?   @map("user_agent") @db.Text
+  ipAddress    String?   @map("ip_address") @db.VarChar(45)
+  expiresAt    DateTime?
+  lastActivity DateTime  @default(now()) @map("last_activity")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([lastActivity])
+  @@map("sessions")
+  @@schema("auth")
+}
+
+model ApiToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @db.Uuid
+  token      String    @unique @db.VarChar(255)
+  name       String?   @db.VarChar(100)
+  scopes     String[]  @db.Text
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([lastUsedAt])
+  @@map("api_tokens")
+  @@schema("auth")
+}
+
+// --------------------------------------------------------
+// Account onboarding and invites
+// --------------------------------------------------------
+
+model AccountOnboarding {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                String   @unique @db.Uuid
+  firstName             String?  @map("first_name") @db.VarChar(100)
+  lastName              String?  @map("last_name") @db.VarChar(100)
+  companyName           String?  @map("company_name") @db.VarChar(255)
+  companyEmail          String?  @map("company_email") @db.VarChar(255)
+  companyEmailConfirmed Boolean  @default(false) @map("company_email_confirmed")
+  accountName           String?  @unique @map("account_name") @db.VarChar(100)
+  wildcardDomain        String?  @map("wildcard_domain") @db.VarChar(255)
+  companySize           String?  @map("company_size") @db.VarChar(50)
+  roleInCompany         String?  @map("role_in_company") @db.VarChar(100)
+  companyDescription    String?  @map("company_description") @db.Text
+  comfortLevel          String?  @map("comfort_level") @db.Text
+  referralSource        String?  @map("referral_source") @db.Text
+  plannedApps           String[] @map("planned_apps") @db.Text
+  currentStep           String   @default("registration") @map("current_step") @db.VarChar(50)
+  completedSteps        String[] @default([]) @map("completed_steps") @db.Text
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @map("updated_at")
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invites AccountInvite[]
+
+  @@map("account_onboarding")
+  @@schema("auth")
+}
+
+model AccountInvite {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  onboardingId String?      @db.Uuid
+  inviteeEmail String       @map("invitee_email") @db.VarChar(255)
+  status       InviteStatus @default(pending)
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  onboarding AccountOnboarding? @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+
+  @@index([onboardingId])
+  @@index([inviteeEmail])
+  @@index([status])
+  @@map("account_invites")
+  @@schema("public")
+}
+
+// --------------------------------------------------------
+// Workflow engine
+// --------------------------------------------------------
+
+model ExecutionLog {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowExecutionId String?  @db.Uuid
+  nodeExecutionId     String?  @db.Uuid
+  logLevel            String   @default("info") @map("log_level") @db.VarChar
+  message             String   @db.Text
+  metadata            Json     @default("{}")
+  timestamp           DateTime @default(now())
+
+  workflowExecution WorkflowExecution? @relation(fields: [workflowExecutionId], references: [id])
+  nodeExecution     NodeExecution?     @relation(fields: [nodeExecutionId], references: [id])
+
+  @@index([workflowExecutionId])
+  @@index([nodeExecutionId])
+  @@index([timestamp])
+  @@map("execution_logs")
+  @@schema("public")
+}
+
+model NodeConnection {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowId   String?  @db.Uuid
+  sourceNodeId String?  @db.Uuid
+  targetNodeId String?  @db.Uuid
+  sourceOutput String   @default("main") @map("source_output") @db.VarChar
+  targetInput  String   @default("main") @map("target_input") @db.VarChar
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  workflow   Workflow?     @relation(fields: [workflowId], references: [id])
+  sourceNode WorkflowNode? @relation("SourceNode", fields: [sourceNodeId], references: [id])
+  targetNode WorkflowNode? @relation("TargetNode", fields: [targetNodeId], references: [id])
+
+  @@index([workflowId])
+  @@index([sourceNodeId])
+  @@index([targetNodeId])
+  @@map("node_connections")
+  @@schema("public")
+}
+
+model NodeExecution {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowExecutionId String?             @db.Uuid
+  workflowNodeId      String?             @db.Uuid
+  status              NodeExecutionStatus @default(pending)
+  inputData           Json                @default("{}") @map("input_data")
+  outputData          Json                @default("{}") @map("output_data")
+  errorData           Json                @default("{}") @map("error_data")
+  startedAt           DateTime?           @map("started_at")
+  finishedAt          DateTime?           @map("finished_at")
+  executionTimeMs     Int?                @map("execution_time")
+  retryCount          Int                 @default(0) @map("retry_count")
+
+  workflowExecution WorkflowExecution? @relation(fields: [workflowExecutionId], references: [id])
+  workflowNode      WorkflowNode?      @relation(fields: [workflowNodeId], references: [id])
+  logs              ExecutionLog[]
+
+  @@index([workflowExecutionId])
+  @@index([workflowNodeId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("node_executions")
+  @@schema("public")
+}
+
+model NodeType {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   @unique @db.VarChar
+  category     String   @db.VarChar
+  displayName  String   @map("display_name") @db.VarChar
+  description  String?  @db.Text
+  icon         String?  @db.VarChar
+  inputSchema  Json     @default("{}") @map("input_schema")
+  outputSchema Json     @default("{}") @map("output_schema")
+  configSchema Json     @default("{}") @map("config_schema")
+  isSystem     Boolean  @default(false) @map("is_system")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  workflowNodes WorkflowNode[]
+
+  @@index([category])
+  @@index([isActive])
+  @@map("node_types")
+  @@schema("public")
+}
+
+model UserSecret {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @db.Uuid
+  secretKey   String   @map("secret_key") @db.VarChar
+  secretValue String   @map("secret_value") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_secrets")
+  @@schema("public")
+}
+
+model WorkflowExecution {
+  id              String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowId      String?                 @db.Uuid
+  triggerData     Json                    @default("{}") @map("trigger_data")
+  status          WorkflowExecutionStatus @default(running)
+  startedAt       DateTime                @default(now()) @map("started_at")
+  finishedAt      DateTime?               @map("finished_at")
+  errorMessage    String?                 @map("error_message") @db.Text
+  executionTimeMs Int?                    @map("execution_time")
+  createdById     String?                 @map("created_by") @db.Uuid
+
+  workflow       Workflow?       @relation(fields: [workflowId], references: [id])
+  createdBy      User?           @relation("WorkflowExecutionsCreatedBy", fields: [createdById], references: [id])
+  nodeExecutions NodeExecution[]
+  logs           ExecutionLog[]
+
+  @@index([workflowId])
+  @@index([status])
+  @@index([createdById])
+  @@map("workflow_executions")
+  @@schema("public")
+}
+
+model WorkflowNode {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowId   String?  @db.Uuid
+  nodeTypeId   String?  @db.Uuid
+  name         String   @db.VarChar
+  positionX    Int      @map("position_x")
+  positionY    Int      @map("position_y")
+  config       Json     @default("{}")
+  inputConfig  Json     @default("{}") @map("input_config")
+  outputConfig Json     @default("{}") @map("output_config")
+  isDisabled   Boolean  @default(false) @map("is_disabled")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @map("updated_at")
+
+  workflow   Workflow?        @relation(fields: [workflowId], references: [id])
+  nodeType   NodeType?        @relation(fields: [nodeTypeId], references: [id])
+  asSource   NodeConnection[] @relation("SourceNode")
+  asTarget   NodeConnection[] @relation("TargetNode")
+  executions NodeExecution[]
+
+  @@index([workflowId])
+  @@index([nodeTypeId])
+  @@index([isDisabled])
+  @@map("workflow_nodes")
+  @@schema("public")
+}
+
+model Workflow {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @db.VarChar
+  description String?  @db.Text
+  userId      String?  @db.Uuid
+  isActive    Boolean  @default(false) @map("is_active")
+  version     Int      @default(1)
+  settings    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  user            User?               @relation(fields: [userId], references: [id])
+  nodes           WorkflowNode[]
+  nodeConnections NodeConnection[]
+  executions      WorkflowExecution[]
+
+  @@unique([userId, name], map: "workflows_user_name_unique")
+  @@index([isActive])
+  @@index([updatedAt])
+  @@map("workflows")
+  @@schema("public")
+}
+
+// --------------------------------------------------------
+// Workspaces
+// --------------------------------------------------------
+
+model WorkspaceMember {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String?       @db.Uuid
+  userId      String?       @db.Uuid
+  role        WorkspaceRole @default(member)
+  permissions Json          @default("{}")
+  joinedAt    DateTime      @default(now()) @map("joined_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+  user      User?      @relation("WorkspaceMembersUser", fields: [userId], references: [id])
+
+  @@unique([workspaceId, userId], map: "workspace_members_unique")
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("workspace_members")
+  @@schema("public")
+}
+
+model Workspace {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @db.VarChar
+  ownerId   String?  @db.Uuid
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  owner   User?             @relation("WorkspacesOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  members WorkspaceMember[]
+
+  @@index([ownerId])
+  @@map("workspaces")
+  @@schema("public")
+}
