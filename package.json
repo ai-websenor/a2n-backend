@@ -20,17 +20,24 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.1",
+    "@nestjs/class-validator": "^0.13.4",
     "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
     "@nestjs/mapped-types": "*",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/swagger": "^7.4.2",
     "@nestjs/typeorm": "^11.0.0",
     "@prisma/client": "^6.14.0",
     "bcrypt": "^6.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
     "pg": "^8.16.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "typeorm": "^0.3.25"
+    "typeorm": "^0.3.25",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -38,10 +45,12 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
     "@types/supertest": "^6.0.2",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
