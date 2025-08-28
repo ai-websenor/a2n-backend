@@ -1,12 +1,26 @@
-// src/auth/auth.controller.ts
-import { Body, Controller, HttpCode, HttpStatus, Post, Param, Get } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Param,
+  Get,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 
-import { RegisterResponse, OnboardingResponse } from './dto/auth-response.dto';
-import { ApiTags } from '@nestjs/swagger';
-import { OnboardingDto, RegisterDto } from './dto/auth.dto';
+import {
+  RegisterResponse,
+  OnboardingResponse,
+  LoginResponse,
+} from './dto/auth-response.dto';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { LoginDto, OnboardingDto, RegisterDto } from './dto/auth.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
-@ApiTags("Auth")
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -17,18 +31,28 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
-  @Post('onboarding/:userId')
+  @Post('onboarding')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
   async completeOnboarding(
-    @Param('userId') userId: string,
-    @Body() dto: OnboardingDto
+    @Request() req,
+    @Body() dto: OnboardingDto,
   ): Promise<OnboardingResponse> {
-    return this.authService.completeOnboarding(userId, dto);
+    return this.authService.completeOnboarding(req.user.id, dto);
   }
 
-  @Get('onboarding-status/:userId')
+  @Get('onboarding-status')
   @HttpCode(HttpStatus.OK)
-  async getOnboardingStatus(@Param('userId') userId: string) {
-    return this.authService.getOnboardingStatus(userId);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  async getOnboardingStatus(@Request() req) {
+    return this.authService.getOnboardingStatus(req.user.id);
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() loginDto: LoginDto): Promise<LoginResponse> {
+    return await this.authService.login(loginDto);
   }
 }

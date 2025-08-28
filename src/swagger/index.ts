@@ -8,12 +8,12 @@ const swaggerOptions = {
     },
     components: {
       securitySchemes: {
-        JWT: {
-          type: 'apiKey',
-          name: 'Authorization',
-          in: 'header',
+       JWT: {
+        type: 'http',
+         scheme: 'bearer',
+          bearerFormat: 'JWT',
           description:
-            'JWT Authorization header using the Bearer scheme. Example: "Bearer {token}"',
+            'Send JWT in the Authorization header using the Bearer scheme. Example: "Bearer {token}"',
         },
       },
     },
@@ -23,7 +23,7 @@ const swaggerOptions = {
       },
     ],
   },
-  apis: ['src/routes/.ts', 'src/model/**/.ts'],
+  apis: ['src/**/*.ts'],
 };
 
 export default swaggerOptions;
