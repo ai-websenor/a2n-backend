@@ -1,0 +1,873 @@
+openapi: 3.0.3
+info:
+  title: A2N Backend API
+  description: |
+    Type-safe backend API for A2N workflow automation platform.
+    This API is built using ORPC (Object RPC) framework with Fastify server, 
+    providing comprehensive authentication, user management, and session management capabilities.
+  version: 1.0.0
+  contact:
+    name: A2N Development Team
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+  - url: https://api.a2n.dev
+    description: Production server
+
+security:
+  - bearerAuth: []
+  - sessionAuth: []
+
+paths:
+  # =================== HEALTH CHECK ===================
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Check API server health and status
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "OK"
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                    example: "1.0.0"
+
+  # =================== AUTHENTICATION ENDPOINTS ===================
+  /auth/signin:
+    post:
+      tags: [Authentication]
+      summary: Sign in user
+      description: Authenticate user with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignInRequest'
+            example:
+              email: "user@example.com"
+              password: "SecurePass123"
+              rememberMe: false
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/signup:
+    post:
+      tags: [Authentication]
+      summary: Register new user
+      description: Create new user account with email verification
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpRequest'
+            example:
+              name: "John Doe"
+              email: "john@example.com"
+              password: "SecurePass123"
+              confirmPassword: "SecurePass123"
+      responses:
+        '201':
+          description: Account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /auth/signout:
+    post:
+      tags: [Authentication]
+      summary: Sign out user
+      description: Sign out current user and invalidate session
+      responses:
+        '200':
+          description: Successfully signed out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /auth/refresh-token:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      description: Generate new access token using refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+
+  /auth/reset-password-request:
+    post:
+      tags: [Authentication]
+      summary: Request password reset
+      description: Send password reset email to user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Password reset email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /auth/reset-password:
+    post:
+      tags: [Authentication]
+      summary: Reset password
+      description: Reset password using reset token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /auth/change-password:
+    post:
+      tags: [Authentication]
+      summary: Change password
+      description: Change password for authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /auth/verify-email:
+    post:
+      tags: [Authentication]
+      summary: Verify email address
+      description: Verify user email with verification token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Email verified successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /auth/setup-two-factor:
+    post:
+      tags: [Authentication]
+      summary: Setup two-factor authentication
+      description: Initialize 2FA setup for user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+      responses:
+        '200':
+          description: 2FA setup information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwoFactorSetupResponse'
+
+  # =================== USER MANAGEMENT ENDPOINTS ===================
+  /user/profile:
+    get:
+      tags: [User Management]
+      summary: Get current user profile
+      description: Retrieve authenticated user's profile information
+      responses:
+        '200':
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+    put:
+      tags: [User Management]
+      summary: Update user profile
+      description: Update current user's profile information
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /user/stats:
+    get:
+      tags: [User Management]
+      summary: Get user statistics
+      description: Retrieve current user's activity statistics
+      responses:
+        '200':
+          description: User statistics retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStats'
+
+  /user/profile/{userId}:
+    get:
+      tags: [User Management]
+      summary: Get user profile by ID
+      description: Retrieve specific user's profile (admin only)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /user/role:
+    put:
+      tags: [User Management]
+      summary: Update user role
+      description: Update user role (admin/owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, role]
+              properties:
+                userId:
+                  type: string
+                role:
+                  $ref: '#/components/schemas/UserRole'
+      responses:
+        '200':
+          description: User role updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /user/search:
+    get:
+      tags: [User Management]
+      summary: Search users
+      description: Search users by criteria (admin only)
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+        - name: role
+          in: query
+          schema:
+            $ref: '#/components/schemas/UserRole'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Users found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  total:
+                    type: integer
+
+  /user/{userId}/deactivate:
+    post:
+      tags: [User Management]
+      summary: Deactivate user
+      description: Deactivate user account (admin only)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User deactivated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /user/email-exists:
+    get:
+      tags: [User Management]
+      summary: Check if email exists
+      description: Check if email is already registered
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        '200':
+          description: Email check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists:
+                    type: boolean
+
+  # =================== SESSION MANAGEMENT ENDPOINTS ===================
+  /session/current:
+    get:
+      tags: [Session Management]
+      summary: Get current session
+      description: Retrieve information about the current user session
+      responses:
+        '200':
+          description: Current session information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetail'
+
+  /session/list:
+    get:
+      tags: [Session Management]
+      summary: Get all user sessions
+      description: Retrieve all sessions for the current user
+      responses:
+        '200':
+          description: List of user sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionDetail'
+
+  /session/{sessionId}:
+    delete:
+      tags: [Session Management]
+      summary: Revoke specific session
+      description: Revoke a specific user session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /session/revoke-others:
+    post:
+      tags: [Session Management]
+      summary: Revoke other sessions
+      description: Revoke all sessions except the current one
+      responses:
+        '200':
+          description: Other sessions revoked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  revokedCount:
+                    type: integer
+
+  /session/stats:
+    get:
+      tags: [Session Management]
+      summary: Get session statistics
+      description: Get session statistics for current user
+      responses:
+        '200':
+          description: Session statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStats'
+
+  /session/refresh-tokens:
+    get:
+      tags: [Session Management]
+      summary: Get refresh tokens
+      description: Get all refresh tokens for current user
+      responses:
+        '200':
+          description: Refresh tokens retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    isRevoked:
+                      type: boolean
+                    expiresAt:
+                      type: string
+                      format: date-time
+                    createdAt:
+                      type: string
+                      format: date-time
+
+  /session/refresh-tokens/{tokenId}:
+    delete:
+      tags: [Session Management]
+      summary: Revoke refresh token
+      description: Revoke a specific refresh token
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Refresh token revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token for API authentication
+
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Session-based authentication via cookies
+
+  schemas:
+    # =================== REQUEST SCHEMAS ===================
+    SignInRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+        rememberMe:
+          type: boolean
+          default: false
+
+    SignUpRequest:
+      type: object
+      required: [name, email, password, confirmPassword]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)'
+        confirmPassword:
+          type: string
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        image:
+          type: string
+          format: uri
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, password, confirmPassword]
+      properties:
+        token:
+          type: string
+          description: Password reset token
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)'
+        confirmPassword:
+          type: string
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword, confirmPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)'
+        confirmPassword:
+          type: string
+
+    # =================== RESPONSE SCHEMAS ===================
+    User:
+      type: object
+      required: [id, name, email, role, emailVerified, twoFactorEnabled]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        emailVerified:
+          type: boolean
+        image:
+          type: string
+          format: uri
+          nullable: true
+        role:
+          $ref: '#/components/schemas/UserRole'
+        twoFactorEnabled:
+          type: boolean
+        workflowsCreated:
+          type: integer
+          minimum: 0
+        workflowsExecuted:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      required: [user, session, accessToken, refreshToken]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        session:
+          $ref: '#/components/schemas/SessionInfo'
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+
+    SessionInfo:
+      type: object
+      required: [id, expiresAt]
+      properties:
+        id:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    SessionDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        ipAddress:
+          type: string
+          nullable: true
+        userAgent:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        lastAccessedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    TokenResponse:
+      type: object
+      required: [accessToken, refreshToken, expiresAt]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    UserStats:
+      type: object
+      properties:
+        workflowsCreated:
+          type: integer
+          minimum: 0
+        workflowsExecuted:
+          type: integer
+          minimum: 0
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+        totalSessions:
+          type: integer
+        activeSessions:
+          type: integer
+
+    TwoFactorSetupResponse:
+      type: object
+      required: [secret, qrCode, backupCodes]
+      properties:
+        secret:
+          type: string
+          description: TOTP secret key
+        qrCode:
+          type: string
+          description: QR code data URL for authenticator apps
+        backupCodes:
+          type: array
+          items:
+            type: string
+          description: Emergency backup codes
+
+    SessionStats:
+      type: object
+      properties:
+        totalSessions:
+          type: integer
+        activeSessions:
+          type: integer
+        expiredSessions:
+          type: integer
+        averageSessionDuration:
+          type: number
+          description: Average session duration in minutes
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+    # =================== ENUMS ===================
+    UserRole:
+      type: string
+      enum: [USER, ADMIN, OWNER]
+      description: User permission level
+
+    AccountStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE, SUSPENDED, DELETED]
+      description: Current account status
+
+    # =================== ERROR SCHEMAS ===================
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "VALIDATION_ERROR"
+            message: "Invalid email format"
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "UNAUTHORIZED"
+            message: "Authentication token required"
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "FORBIDDEN"
+            message: "Admin access required"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "NOT_FOUND"
+            message: "User not found"
+
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "CONFLICT"
+            message: "Email already exists"
+
+tags:
+  - name: System
+    description: System health and status endpoints
+  - name: Authentication
+    description: User authentication and authorization
+  - name: User Management
+    description: User profile and account management
+  - name: Session Management
+    description: Session tracking and token management
